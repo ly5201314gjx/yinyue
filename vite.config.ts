@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => {
       react(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+        // Removed includeAssets to avoid 404s for missing local files
         manifest: {
           name: 'Lg 音乐',
           short_name: 'Lg Music',
@@ -22,13 +22,14 @@ export default defineConfig(({ mode }) => {
           start_url: '/',
           icons: [
             {
-              src: 'pwa-192x192.png',
+              // Using a reliable remote placeholder icon for PWA installability
+              src: 'https://cdn-icons-png.flaticon.com/512/1251/1251671.png',
               sizes: '192x192',
               type: 'image/png',
               purpose: 'any maskable'
             },
             {
-              src: 'pwa-512x512.png',
+              src: 'https://cdn-icons-png.flaticon.com/512/1251/1251671.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any maskable'
@@ -57,6 +58,18 @@ export default defineConfig(({ mode }) => {
                 expiration: {
                   maxEntries: 100,
                   maxAgeSeconds: 60 * 60 * 24 // 1 Day
+                }
+              }
+            },
+            {
+              // Cache CDN icons
+              urlPattern: /^https:\/\/cdn-icons-png\.flaticon\.com\/.*$/,
+              handler: 'StaleWhileRevalidate',
+              options: {
+                cacheName: 'icon-cache',
+                expiration: {
+                   maxEntries: 10,
+                   maxAgeSeconds: 60 * 60 * 24 * 30 
                 }
               }
             }
