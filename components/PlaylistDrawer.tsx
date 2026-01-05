@@ -48,7 +48,7 @@ const PlaylistDrawer: React.FC<PlaylistDrawerProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[110] flex flex-col justify-end md:justify-end md:items-end md:bottom-[100px] md:right-8 pointer-events-none">
+    <div className="fixed inset-0 z-[110] flex flex-col justify-end md:justify-end md:items-end md:bottom-[100px] md:right-24 pointer-events-none">
        {/* Mobile Backdrop */}
       <div 
         className="absolute inset-0 bg-slate-900/30 backdrop-blur-sm md:hidden pointer-events-auto transition-opacity animate-fade-in" 

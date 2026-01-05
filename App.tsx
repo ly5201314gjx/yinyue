@@ -7,7 +7,7 @@ import SourceManager from './components/SourceManager';
 import PlaylistDrawer from './components/PlaylistDrawer';
 import { searchMusic, getTopCharts, findNeteaseMusic, getNeteaseLyrics, getMusicUrl } from './services/music';
 import { Song, PlayerState, ViewMode, MusicSource, PlayMode } from './types';
-import { Search, Music, Heart, Clock, Menu, ListFilter, User, X, Loader2, RefreshCw } from 'lucide-react';
+import { Search, Music, Heart, Clock, Menu, ListFilter, User, X, Loader2, RefreshCw, Copy, Check, BarChart3, Music2 } from 'lucide-react';
 
 const DEFAULT_SOURCES: MusicSource[] = [
   // --- High Quality Aggregators ---
@@ -86,6 +86,9 @@ function App() {
   // Playback Control
   const [playMode, setPlayMode] = useState<PlayMode>('sequence');
   const [playbackQueue, setPlaybackQueue] = useState<Song[]>([]);
+  
+  // Copy feedback
+  const [headerCopied, setHeaderCopied] = useState(false);
   
   // Flag to differentiate auto-next from manual-next (for Single Loop)
   const isAutoPlayRef = useRef(false);
@@ -413,6 +416,14 @@ function App() {
       });
   };
 
+  const handleHeaderCopy = () => {
+      if (playerState.currentSong) {
+          navigator.clipboard.writeText(`${playerState.currentSong.trackName} - ${playerState.currentSong.artistName}`);
+          setHeaderCopied(true);
+          setTimeout(() => setHeaderCopied(false), 2000);
+      }
+  }
+
   // Logic for finding next song based on Mode
   const handleNext = (isAuto = false) => {
     isAutoPlayRef.current = isAuto;
@@ -530,6 +541,18 @@ function App() {
 
   return (
     <div className="flex h-screen bg-[#f5f7fa] text-slate-800 font-sans overflow-hidden selection:bg-indigo-100 relative">
+      <style>{`
+        @keyframes marquee {
+            0% { transform: translateX(100%); }
+            100% { transform: translateX(-100%); }
+        }
+        .animate-marquee {
+            animation: marquee 15s linear infinite;
+        }
+        .animate-marquee:hover {
+            animation-play-state: paused;
+        }
+      `}</style>
       
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none bg-gradient-to-br from-indigo-50/50 via-white to-slate-50" />
 
@@ -565,46 +588,99 @@ function App() {
       <div className="flex-1 flex flex-col h-full overflow-hidden relative z-10">
         
         {/* Header / Search */}
-        <header className="h-[96px] flex items-center px-4 md:px-10 z-30 shrink-0 gap-6">
-          <button 
-            onClick={() => setIsSidebarOpen(true)}
-            className="md:hidden w-10 h-10 flex items-center justify-center rounded-xl bg-white shadow-sm text-slate-600 transition-colors"
-          >
-            <Menu size={20} />
-          </button>
+        <header className="flex flex-col z-30 shrink-0">
+            {/* Top Bar with Search */}
+            <div className="h-[96px] flex items-center px-4 md:px-10 gap-6">
+                <button 
+                    onClick={() => setIsSidebarOpen(true)}
+                    className="md:hidden w-10 h-10 flex items-center justify-center rounded-xl bg-white shadow-sm text-slate-600 transition-colors"
+                >
+                    <Menu size={20} />
+                </button>
 
-          <form onSubmit={handleSearch} className="flex-1 max-w-2xl relative group">
-            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 transition-colors" size={20} />
-            <input 
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="搜索 歌名 / 歌手 / 歌名+歌手 ..."
-              className="w-full bg-white border border-slate-200/80 hover:border-indigo-300/50 rounded-2xl py-3.5 pl-14 pr-6 text-sm font-medium focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all placeholder:text-slate-400 text-slate-800 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] font-[Noto Sans SC]"
-            />
-          </form>
-          
-          <div className="flex items-center gap-4">
-             <div 
-                onClick={refreshCurrentSong}
-                className={`w-10 h-10 rounded-full bg-white border border-slate-100 flex items-center justify-center cursor-pointer hover:bg-slate-50 transition shrink-0 shadow-sm text-indigo-600 hover:shadow-md hover:scale-105 duration-300 relative group overflow-hidden ${playerState.isLoading ? 'cursor-wait' : ''}`}
-                title="点击刷新当前播放连接"
-             >
-                 {playerState.isLoading ? (
-                     <Loader2 size={20} className="animate-spin" />
-                 ) : playerState.latency !== undefined && playerState.isPlaying ? (
-                     <div className="flex flex-col items-center justify-center leading-none">
-                         <span className="text-[10px] font-black">{playerState.latency}</span>
-                         <span className="text-[8px] scale-75 font-bold opacity-60">ms</span>
-                         <div className="absolute inset-0 bg-indigo-500/10 opacity-0 group-hover:opacity-100 flex items-center justify-center backdrop-blur-[1px] transition-opacity">
-                            <RefreshCw size={16} />
-                         </div>
-                     </div>
-                 ) : (
-                    <Music size={20} />
-                 )}
-             </div>
-          </div>
+                <form onSubmit={handleSearch} className="flex-1 max-w-2xl relative group">
+                    <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 transition-colors" size={20} />
+                    <input 
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="搜索 歌名 / 歌手 / 歌名+歌手 ..."
+                    className="w-full bg-white border border-slate-200/80 hover:border-indigo-300/50 rounded-2xl py-3.5 pl-14 pr-6 text-sm font-medium focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all placeholder:text-slate-400 text-slate-800 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] font-[Noto Sans SC]"
+                    />
+                </form>
+                
+                <div className="flex items-center gap-4">
+                    <div 
+                        onClick={refreshCurrentSong}
+                        className={`w-10 h-10 rounded-full bg-white border border-slate-100 flex items-center justify-center cursor-pointer hover:bg-slate-50 transition shrink-0 shadow-sm text-indigo-600 hover:shadow-md hover:scale-105 duration-300 relative group overflow-hidden ${playerState.isLoading ? 'cursor-wait' : ''}`}
+                        title="点击刷新当前播放连接"
+                    >
+                        {playerState.isLoading ? (
+                            <Loader2 size={20} className="animate-spin" />
+                        ) : playerState.latency !== undefined && playerState.isPlaying ? (
+                            <div className="flex flex-col items-center justify-center leading-none">
+                                <span className="text-[10px] font-black">{playerState.latency}</span>
+                                <span className="text-[8px] scale-75 font-bold opacity-60">ms</span>
+                                <div className="absolute inset-0 bg-indigo-500/10 opacity-0 group-hover:opacity-100 flex items-center justify-center backdrop-blur-[1px] transition-opacity">
+                                    <RefreshCw size={16} />
+                                </div>
+                            </div>
+                        ) : (
+                            <Music size={20} />
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* Now Playing Scrolling Banner */}
+            {playerState.currentSong && (
+                <div className="w-full px-4 md:px-10 pb-2 -mt-2">
+                    <div 
+                        onClick={handleHeaderCopy}
+                        className="relative w-full max-w-2xl bg-white/40 backdrop-blur-md border border-indigo-100/50 rounded-lg overflow-hidden h-8 flex items-center cursor-pointer hover:bg-white/60 transition-colors group"
+                        title="点击复制歌名"
+                    >
+                        {/* Static Icon */}
+                        <div className="absolute left-0 top-0 bottom-0 w-10 flex items-center justify-center z-10 bg-gradient-to-r from-white/80 to-transparent">
+                            {playerState.isPlaying ? (
+                                <div className="flex items-end gap-[2px] h-3">
+                                    <div className="w-[2px] bg-indigo-500 animate-[music-bar_0.5s_ease-in-out_infinite]"></div>
+                                    <div className="w-[2px] bg-indigo-500 animate-[music-bar_0.5s_ease-in-out_infinite_0.1s]"></div>
+                                    <div className="w-[2px] bg-indigo-500 animate-[music-bar_0.5s_ease-in-out_infinite_0.2s]"></div>
+                                </div>
+                            ) : (
+                                <Music2 size={14} className="text-slate-400" />
+                            )}
+                        </div>
+
+                        {/* Scrolling Text */}
+                        <div className="flex-1 overflow-hidden relative mx-8">
+                            <div className="whitespace-nowrap inline-block animate-marquee w-max">
+                                <span className="text-xs font-bold text-slate-700 mr-8">
+                                    {playerState.currentSong.trackName} <span className="text-slate-400 font-normal mx-1">-</span> {playerState.currentSong.artistName}
+                                </span>
+                                <span className="text-xs font-bold text-slate-700 mr-8">
+                                    {playerState.currentSong.trackName} <span className="text-slate-400 font-normal mx-1">-</span> {playerState.currentSong.artistName}
+                                </span>
+                                <span className="text-xs font-bold text-slate-700 mr-8">
+                                    {playerState.currentSong.trackName} <span className="text-slate-400 font-normal mx-1">-</span> {playerState.currentSong.artistName}
+                                </span>
+                            </div>
+                        </div>
+
+                         {/* Right Copy Feedback */}
+                         <div className="absolute right-0 top-0 bottom-0 w-16 flex items-center justify-end pr-3 z-10 bg-gradient-to-l from-white/80 to-transparent">
+                            {headerCopied ? (
+                                <div className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full animate-fade-in">
+                                    <Check size={10} /> 已复制
+                                </div>
+                            ) : (
+                                <Copy size={12} className="text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </header>
 
         {/* Scrollable Content */}

@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Play, Pause, SkipBack, SkipForward, Volume2, ListMusic, Volume1, Heart, Repeat, Repeat1, Shuffle, Loader2, Copy, Check } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, ListMusic, Volume1, Heart, Repeat, Repeat1, Shuffle, Loader2 } from 'lucide-react';
 import { Song, PlayerState, PlayMode } from '../types';
 
 interface PlayerBarProps {
@@ -49,14 +49,9 @@ const PlayerBar: React.FC<PlayerBarProps> = ({
   const lastTimeUpdateRef = useRef<number>(0);
   const [errorRetries, setErrorRetries] = useState(0);
 
-  // Popover state
-  const [showInfoPopover, setShowInfoPopover] = useState(false);
-  const [copied, setCopied] = useState(false);
-
   // Reset retries when song changes
   useEffect(() => {
     setErrorRetries(0);
-    setShowInfoPopover(false);
   }, [currentSong?.trackId]);
 
   // Sync Audio Playback State
@@ -148,15 +143,6 @@ const PlayerBar: React.FC<PlayerBarProps> = ({
           setErrorRetries(prev => prev + 1);
           onPlayError();
       }
-  };
-
-  const handleCopy = (e: React.MouseEvent) => {
-      e.stopPropagation();
-      if (!currentSong) return;
-      const text = `${currentSong.trackName} - ${currentSong.artistName}`;
-      navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
   };
 
   const getModeIcon = () => {
@@ -299,51 +285,9 @@ const PlayerBar: React.FC<PlayerBarProps> = ({
         </div>
       </div>
 
-      {/* --- RIGHT SECTION: Song Info & Tools --- */}
-      <div className="flex items-center justify-end gap-3 md:gap-4 shrink-0 min-w-0">
+      {/* --- RIGHT SECTION: Just Volume & Playlist (Removed Song Text) --- */}
+      <div className="flex items-center justify-end gap-3 md:gap-4 shrink-0">
         
-        {/* Song Text Info (Right Aligned, Popover Trigger) */}
-        <div className="relative">
-            <div 
-                onClick={(e) => { e.stopPropagation(); setShowInfoPopover(!showInfoPopover); }}
-                className="flex flex-col items-end justify-center min-w-0 cursor-pointer group/text py-2"
-            >
-                <h4 
-                    className="text-slate-900 font-black truncate text-[10px] md:text-xs max-w-[50px] md:max-w-[150px] leading-tight text-right transition-colors group-hover/text:text-indigo-600 select-none" 
-                >
-                    {currentSong.trackName}
-                </h4>
-                <p className="text-slate-400 font-bold text-[8px] md:text-[10px] truncate max-w-[40px] md:max-w-[100px] text-right mt-0.5 group-hover/text:text-indigo-400 select-none">
-                    {currentSong.artistName}
-                </p>
-            </div>
-
-            {/* Detail Popover */}
-            {showInfoPopover && (
-                <>
-                    <div className="fixed inset-0 z-[150]" onClick={() => setShowInfoPopover(false)}></div>
-                    <div className="absolute bottom-full right-0 mb-4 w-56 bg-slate-900/95 backdrop-blur-xl text-white p-4 rounded-2xl shadow-2xl z-[160] animate-fade-in border border-slate-700/50">
-                        <div className="flex flex-col gap-1.5">
-                            <p className="text-sm font-bold leading-relaxed break-words text-slate-50">{currentSong.trackName}</p>
-                            <div className="h-px w-full bg-slate-700/50 my-1"></div>
-                            <p className="text-xs font-medium text-slate-400 break-words">{currentSong.artistName}</p>
-                        </div>
-                        <div className="mt-3 flex justify-end">
-                            <button 
-                                onClick={handleCopy}
-                                className="flex items-center gap-1.5 text-[10px] font-bold bg-white/10 hover:bg-indigo-500 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg transition-all active:scale-95"
-                            >
-                                {copied ? <Check size={12} className="text-green-400"/> : <Copy size={12} />}
-                                {copied ? '已复制' : '复制全名'}
-                            </button>
-                        </div>
-                        {/* Arrow */}
-                        <div className="absolute bottom-[-6px] right-6 w-3 h-3 bg-slate-900/95 rotate-45 border-r border-b border-slate-700/50"></div>
-                    </div>
-                </>
-            )}
-        </div>
-
         {/* Tools Divider */}
         <div className="w-px h-5 bg-slate-200/60 hidden md:block"></div>
 
