@@ -11,7 +11,10 @@ export interface Song {
   isFullVersion?: boolean; // Flag to indicate if this is a full version from external API
   lyrics?: string; // Lyrics from external API
   source?: 'itunes' | 'netease'; // Origin of the song data
+  _playId?: number; // Timestamp to force effect updates for replaying same song
 }
+
+export type PlayMode = 'sequence' | 'shuffle' | 'single';
 
 export interface PlayerState {
   currentSong: Song | null;
@@ -21,6 +24,7 @@ export interface PlayerState {
   progress: number; // 0-100
   duration: number; // seconds
   currentTime: number; // seconds
+  latency?: number; // Network/Playback latency in ms
 }
 
 export interface ChatMessage {

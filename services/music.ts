@@ -41,11 +41,13 @@ const searchNetease = async (term: string): Promise<Song[]> => {
       artistName: song.ar?.map((a: any) => a.name).join(', ') || 'Unknown',
       collectionName: song.al?.name || '',
       artworkUrl100: song.al?.picUrl || '',
-      // Construct direct URL. Note: This might not work for VIP songs, but works for many.
+      // Construct direct URL. This is optimistic.
       previewUrl: `https://music.163.com/song/media/outer/url?id=${song.id}.mp3`,
       trackTimeMillis: song.dt || 0,
       isFullVersion: true,
-      source: 'netease'
+      source: 'netease',
+      // We store the original ID to use for detail checks later if needed
+      originalId: song.id 
     }));
   } catch (error) {
     console.error("Netease Search failed:", error);
@@ -63,17 +65,10 @@ export const searchMusic = async (term: string): Promise<Song[]> => {
     searchItunes(term)
   ]);
 
-  // Merge results
-  // We prioritize Netease results because they are full versions.
-  // However, we want to avoid duplicates if possible, or just show both options.
-  // For simplicity, we interleave or just append. 
-  // Let's put Netease first for better "Free Music" experience.
   return [...ncmResults, ...itunesResults];
 };
 
 export const getTopCharts = async (): Promise<Song[]> => {
-  // We can try to fetch a playlist from Netease for "Top Charts" behavior if iTunes fails or just use iTunes for stable charts
-  // For now, use the hybrid search for a generic "Hits" term which works well.
   return searchMusic('Hot Hits 2024');
 };
 
@@ -101,12 +96,39 @@ const cleanTitle = (title: string) => {
     .trim();
 }
 
+// Check privileges to avoid VIP songs that won't play
+const checkSongDetails = async (ids: number[]): Promise<Set<number>> => {
+    if (ids.length === 0) return new Set();
+    try {
+        const res = await fetch(`${NCM_API_BASE}/song/detail?ids=${ids.join(',')}`);
+        const data = await res.json();
+        const playableIds = new Set<number>();
+        
+        data.songs?.forEach((song: any) => {
+            // fee: 0 = free, 8 = free/low-quality, 1 = VIP, 4 = Paid Album
+            // We generally want to avoid 1 and 4 for direct playback
+            if (song.fee !== 1 && song.fee !== 4) {
+                playableIds.add(song.id);
+            }
+        });
+        return playableIds;
+    } catch (e) {
+        console.warn("Detail check failed", e);
+        // If check fails, assume all are okay to try
+        return new Set(ids);
+    }
+}
+
 export const findNeteaseMusic = async (trackName: string, artistName: string): Promise<{ url: string, lyrics: string, duration: number } | null> => {
   const cleanTrack = cleanTitle(trackName);
+  // Strategy: 
+  // 1. Exact match
+  // 2. Clean title match
+  // 3. If standard search fails/is VIP, try searching for "Cover" or "Live" versions which are often free
   const queries = [
       `${trackName} ${artistName}`,
       `${cleanTrack} ${artistName}`,
-      `${cleanTrack}`,
+      `${cleanTrack}`
   ];
   
   const uniqueQueries = [...new Set(queries)];
@@ -116,15 +138,31 @@ export const findNeteaseMusic = async (trackName: string, artistName: string): P
         const query = encodeURIComponent(q);
         const timestamp = Date.now();
         
-        const searchRes = await fetch(`${NCM_API_BASE}/cloudsearch?keywords=${query}&limit=3&timestamp=${timestamp}`);
+        // Fetch more results to increase chance of finding a free version
+        const searchRes = await fetch(`${NCM_API_BASE}/cloudsearch?keywords=${query}&limit=6&timestamp=${timestamp}`);
         const searchData = await searchRes.json();
         const songs = searchData.result?.songs || [];
         
+        if (songs.length === 0) continue;
+
+        const songIds = songs.map((s: any) => s.id);
+        const playableIds = await checkSongDetails(songIds);
+
+        // Iterate through songs and pick the first playable one
         for (const song of songs) {
             const ncmSongId = song.id;
             const ncmDuration = song.dt ? song.dt / 1000 : 0; 
             
+            // Skip very short clips
             if (ncmDuration < 60) continue;
+
+            // Prioritize playable songs
+            if (!playableIds.has(ncmSongId)) {
+                // If this is the only result, we might try it anyway, but let's prefer others first.
+                // If we are at the last query and haven't found anything, maybe just return this one?
+                // For now, strict skipping of VIP to ensure "Playable"
+                continue; 
+            }
 
             // Direct URL
             const songUrl = `https://music.163.com/song/media/outer/url?id=${ncmSongId}.mp3`;

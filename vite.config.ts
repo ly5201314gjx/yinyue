@@ -17,18 +17,48 @@ export default defineConfig(({ mode }) => {
           theme_color: '#ffffff',
           background_color: '#ffffff',
           display: 'standalone',
+          orientation: 'portrait',
           scope: '/',
           start_url: '/',
           icons: [
             {
               src: 'pwa-192x192.png',
               sizes: '192x192',
-              type: 'image/png'
+              type: 'image/png',
+              purpose: 'any maskable'
             },
             {
               src: 'pwa-512x512.png',
               sizes: '512x512',
-              type: 'image/png'
+              type: 'image/png',
+              purpose: 'any maskable'
+            }
+          ]
+        },
+        workbox: {
+          globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+          runtimeCaching: [
+            {
+              urlPattern: /^https:\/\/.*\.googlevideo\.com\/.*$/,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'media-cache',
+                expiration: {
+                  maxEntries: 50,
+                  maxAgeSeconds: 30 * 24 * 60 * 60 // 30 Days
+                }
+              }
+            },
+            {
+              urlPattern: /^https:\/\/.*\.163\.com\/.*$/,
+              handler: 'StaleWhileRevalidate',
+              options: {
+                cacheName: 'music-api-cache',
+                expiration: {
+                  maxEntries: 100,
+                  maxAgeSeconds: 60 * 60 * 24 // 1 Day
+                }
+              }
             }
           ]
         }
@@ -36,7 +66,6 @@ export default defineConfig(({ mode }) => {
     ],
     define: {
       'process.env.API_KEY': JSON.stringify(env.API_KEY),
-      // Prevent crash if process is accessed elsewhere
       'process.env': {}
     }
   };

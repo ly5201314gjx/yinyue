@@ -1,42 +1,60 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Play, Pause, SkipBack, SkipForward, Volume2, ListMusic, Volume1, Heart, Shuffle, Repeat, Loader2 } from 'lucide-react';
-import { Song, PlayerState } from '../types';
+import { Play, Pause, SkipBack, SkipForward, Volume2, ListMusic, Volume1, Heart, Repeat, Repeat1, Shuffle, Loader2 } from 'lucide-react';
+import { Song, PlayerState, PlayMode } from '../types';
 
 interface PlayerBarProps {
   playerState: PlayerState;
+  playMode: PlayMode;
   isLiked: boolean;
+  isPlaylistOpen: boolean;
   onPlayPause: () => void;
   onVolumeChange: (vol: number) => void;
   onTimeUpdate: (time: number) => void;
   onDurationChange: (duration: number) => void;
-  onNext: () => void;
+  onNext: () => void; // Manual Next
+  onEnded: () => void; // Auto Next (Song Finished)
   onPrev: () => void;
   onToggleLyrics: () => void;
   onToggleLike: (song: Song) => void;
+  onLatencyChange: (latency: number) => void;
+  onToggleMode: () => void;
+  onTogglePlaylist: () => void;
+  onPlayError: () => void;
 }
 
 const PlayerBar: React.FC<PlayerBarProps> = ({
   playerState,
+  playMode,
   isLiked,
+  isPlaylistOpen,
   onPlayPause,
   onVolumeChange,
   onTimeUpdate,
   onDurationChange,
   onNext,
+  onEnded,
   onPrev,
   onToggleLyrics,
-  onToggleLike
+  onToggleLike,
+  onLatencyChange,
+  onToggleMode,
+  onTogglePlaylist,
+  onPlayError
 }) => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const { currentSong, isPlaying, isLoading, volume, currentTime, duration } = playerState;
   const [isSeeking, setIsSeeking] = useState(false);
   const [seekValue, setSeekValue] = useState(0);
-  
-  // Ref to throttle time updates. 
-  // We use a small threshold (0.1s) to ensure lyrics sync is smooth while not over-rendering.
+  const loadStartTimeRef = useRef<number>(0);
   const lastTimeUpdateRef = useRef<number>(0);
+  const [errorRetries, setErrorRetries] = useState(0);
 
-  // Sync Audio Playback
+  // Reset retries when song changes
+  useEffect(() => {
+    setErrorRetries(0);
+  }, [currentSong?.trackId]);
+
+  // Sync Audio Playback State
   useEffect(() => {
     if (audioRef.current) {
       if (isPlaying && !isLoading) {
@@ -50,7 +68,7 @@ const PlayerBar: React.FC<PlayerBarProps> = ({
         audioRef.current.pause();
       }
     }
-  }, [isPlaying, isLoading, currentSong]);
+  }, [isPlaying, isLoading]);
 
   // Sync Volume
   useEffect(() => {
@@ -59,17 +77,33 @@ const PlayerBar: React.FC<PlayerBarProps> = ({
     }
   }, [volume]);
 
-  // Sync Source
+  // Sync Source (URL Change)
   useEffect(() => {
       if (currentSong && audioRef.current) {
+          // Only update src if it's different to avoid reloading
           if (audioRef.current.src !== currentSong.previewUrl) {
+              loadStartTimeRef.current = performance.now();
               audioRef.current.src = currentSong.previewUrl;
               lastTimeUpdateRef.current = 0; 
+              onLatencyChange(0);
           }
       }
-  }, [currentSong]);
+  }, [currentSong?.previewUrl]); // Only trigger on URL change
 
-  // Update slider when time updates (only if not seeking)
+  // Handle Forced Replay (Same Song, New Play ID)
+  useEffect(() => {
+      if (currentSong?._playId && audioRef.current) {
+          // If URL matches but _playId changed (or just on _playId change), verify if we need to restart
+          // We check if src matches to ensure we are replaying the current track
+          if (audioRef.current.src === currentSong.previewUrl) {
+              audioRef.current.currentTime = 0;
+              if (isPlaying && !isLoading) {
+                  audioRef.current.play().catch(e => console.log("Replay failed", e));
+              }
+          }
+      }
+  }, [currentSong?._playId]);
+
   useEffect(() => {
       if (!isSeeking) {
           setSeekValue(currentTime);
@@ -86,18 +120,47 @@ const PlayerBar: React.FC<PlayerBarProps> = ({
               audioRef.current.currentTime = validTime;
           }
       }
-      
       onTimeUpdate(time);
   };
 
   const handleTimeUpdate = (e: React.SyntheticEvent<HTMLAudioElement>) => {
       if (isSeeking) return;
-      
       const time = e.currentTarget.currentTime;
-      // High frequency update for lyrics (every ~100ms)
       if (Math.abs(time - lastTimeUpdateRef.current) > 0.1 || time < 1) {
           lastTimeUpdateRef.current = time;
           onTimeUpdate(time);
+      }
+  };
+
+  const handleCanPlay = () => {
+     if (loadStartTimeRef.current > 0) {
+         const latency = Math.round(performance.now() - loadStartTimeRef.current);
+         onLatencyChange(latency);
+         loadStartTimeRef.current = 0; 
+     }
+  };
+
+  const handleError = (e: React.SyntheticEvent<HTMLAudioElement, Event>) => {
+      console.error("Audio playback error:", e.currentTarget.error);
+      if (errorRetries < 2) { 
+          setErrorRetries(prev => prev + 1);
+          onPlayError();
+      }
+  };
+
+  const getModeIcon = () => {
+      switch (playMode) {
+          case 'sequence': return <Repeat size={18} />;
+          case 'shuffle': return <Shuffle size={18} />;
+          case 'single': return <Repeat1 size={18} />;
+      }
+  };
+
+  const getModeTitle = () => {
+      switch (playMode) {
+          case 'sequence': return '列表循环';
+          case 'shuffle': return '随机播放';
+          case 'single': return '单曲循环';
       }
   };
 
@@ -110,8 +173,9 @@ const PlayerBar: React.FC<PlayerBarProps> = ({
         preload="auto"
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={(e) => onDurationChange(e.currentTarget.duration)}
-        onEnded={onNext}
-        onError={(e) => console.error("Audio playback error", e)}
+        onCanPlay={handleCanPlay}
+        onEnded={onEnded} // Use specific prop for auto-next
+        onError={handleError}
       />
 
       {/* Album Art & Info */}
@@ -149,8 +213,14 @@ const PlayerBar: React.FC<PlayerBarProps> = ({
       {/* Center Controls & Progress */}
       <div className="flex flex-col items-center justify-center gap-1 w-1/3 -mt-1">
         <div className="flex items-center justify-center gap-5 md:gap-6 mb-1">
-           <button className="text-slate-300 hover:text-indigo-500 transition-colors hidden md:block" title="随机播放">
-             <Shuffle size={16} />
+           {/* Mode Toggle Button */}
+           <button 
+             onClick={onToggleMode}
+             className="text-slate-400 hover:text-indigo-500 transition-colors active:scale-90 relative group" 
+             title={getModeTitle()}
+           >
+             {getModeIcon()}
+             {playMode === 'single' && <span className="absolute -top-1 -right-1 flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span></span>}
            </button>
            
            <button onClick={onPrev} className="text-slate-800 hover:text-indigo-600 transition-colors hover:scale-110 active:scale-95">
@@ -179,15 +249,12 @@ const PlayerBar: React.FC<PlayerBarProps> = ({
              <SkipForward size={22} fill="currentColor" className="stroke-none" />
            </button>
            
-           <button className="text-slate-300 hover:text-indigo-500 transition-colors hidden md:block" title="循环播放">
-             <Repeat size={16} />
-           </button>
+           <div className="hidden md:block w-4"></div> {/* Spacer to balance mode button */}
         </div>
         
-        {/* Dynamic Progress Bar */}
+        {/* Progress Bar */}
         <div className="w-full flex items-center gap-3 text-[10px] font-bold text-slate-400 tabular-nums">
           <span className="w-8 text-right">{formatTime(seekValue)}</span>
-          
           <div className="flex-1 relative h-6 md:h-5 flex items-center group cursor-pointer">
              <input
                 type="range"
@@ -201,8 +268,7 @@ const PlayerBar: React.FC<PlayerBarProps> = ({
                 onTouchEnd={() => setIsSeeking(false)}
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
              />
-             <div className="w-full h-1 bg-slate-200 rounded-full overflow-hidden pointer-events-none transition-all duration-300 ease-out group-hover:h-2">
-             </div>
+             <div className="w-full h-1 bg-slate-200 rounded-full overflow-hidden pointer-events-none transition-all duration-300 ease-out group-hover:h-2"></div>
              <div 
                 className="absolute left-0 h-1 bg-indigo-500 rounded-full pointer-events-none transition-all duration-300 ease-out group-hover:h-2"
                 style={{ width: `${(seekValue / (duration || 1)) * 100}%` }}
@@ -212,7 +278,6 @@ const PlayerBar: React.FC<PlayerBarProps> = ({
                  </div>
              </div>
           </div>
-          
           <span className="w-8">{formatTime(duration)}</span>
         </div>
       </div>
@@ -232,9 +297,9 @@ const PlayerBar: React.FC<PlayerBarProps> = ({
             />
         </div>
         <button 
-            onClick={onToggleLyrics} 
-            className="w-10 h-10 flex items-center justify-center rounded-full bg-transparent hover:bg-indigo-50 text-slate-500 hover:text-indigo-600 transition-all" 
-            title="查看歌词"
+            onClick={onTogglePlaylist}
+            className={`w-10 h-10 flex items-center justify-center rounded-full transition-all ${isPlaylistOpen ? 'bg-indigo-100 text-indigo-600' : 'bg-transparent hover:bg-indigo-50 text-slate-500 hover:text-indigo-600'}`}
+            title="播放列表"
         >
              <ListMusic size={20} />
         </button>

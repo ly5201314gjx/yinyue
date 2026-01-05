@@ -63,16 +63,9 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, isOpen, on
       `}>
         
         {/* Header / Logo */}
-        <div className="h-24 flex items-center px-6">
-          <div className="flex items-center gap-3 select-none group cursor-pointer">
-            <div className="relative w-8 h-8 flex items-center justify-center">
-                <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-violet-500 rounded-lg shadow-lg shadow-indigo-500/30 transform transition-transform duration-500 group-hover:rotate-12 group-hover:scale-110"></div>
-                <Music2 className="relative text-white" size={16} strokeWidth={2.5} />
-            </div>
-            <div>
-                 <h1 className="text-base font-black tracking-tight text-slate-800 font-[Noto Sans SC] leading-none">Lg 音乐</h1>
-                 <p className="text-[9px] text-slate-400 font-bold tracking-widest uppercase mt-0.5 scale-90 origin-left">Studio</p>
-            </div>
+        <div className="h-24 flex items-center px-8">
+          <div className="flex items-center gap-3 select-none cursor-pointer">
+             <h1 className="text-4xl text-indigo-600 font-[Zhi Mang Xing] leading-none drop-shadow-sm hover:scale-105 transition-transform duration-300">Lg 音乐</h1>
           </div>
           <button onClick={onClose} className="md:hidden ml-auto p-1.5 text-slate-400 hover:bg-slate-100 rounded-full">
             <X size={18} />
@@ -113,8 +106,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView, isOpen, on
                             <Settings2 size={14} />
                         </div>
                         <div className="text-left">
-                            <span className="block text-xs font-bold text-slate-700 group-hover:text-indigo-900">音源配置</span>
-                            <span className="block text-[9px] text-slate-400 font-medium">Custom Sources</span>
+                            <span className="block text-xs font-bold text-slate-700 group-hover:text-indigo-900">设置 & 音源</span>
+                            <span className="block text-[9px] text-slate-400 font-medium">Settings & Sources</span>
                         </div>
                     </div>
                     <Command size={12} className="text-slate-300 mr-1" />

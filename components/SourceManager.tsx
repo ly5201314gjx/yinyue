@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Plus, Trash2, Check, Globe, AlertCircle } from 'lucide-react';
+import { X, Plus, Trash2, Check, Globe, AlertCircle, RefreshCcw } from 'lucide-react';
 import { MusicSource } from '../types';
 
 interface SourceManagerProps {
@@ -8,12 +8,14 @@ interface SourceManagerProps {
   sources: MusicSource[];
   onAddSource: (name: string, url: string) => void;
   onRemoveSource: (id: string) => void;
+  onResetData: () => void;
 }
 
-const SourceManager: React.FC<SourceManagerProps> = ({ isOpen, onClose, sources, onAddSource, onRemoveSource }) => {
+const SourceManager: React.FC<SourceManagerProps> = ({ isOpen, onClose, sources, onAddSource, onRemoveSource, onResetData }) => {
   const [newByName, setNewName] = useState('');
   const [newUrl, setNewUrl] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [resetConfirm, setResetConfirm] = useState(false);
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,6 +37,17 @@ const SourceManager: React.FC<SourceManagerProps> = ({ isOpen, onClose, sources,
     }
   };
 
+  const handleResetClick = () => {
+      if (resetConfirm) {
+          onResetData();
+          setResetConfirm(false);
+          onClose(); // Close modal after reset
+      } else {
+          setResetConfirm(true);
+          setTimeout(() => setResetConfirm(false), 3000);
+      }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -46,18 +59,18 @@ const SourceManager: React.FC<SourceManagerProps> = ({ isOpen, onClose, sources,
       />
 
       {/* Modal */}
-      <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden animate-fade-in border border-slate-100">
-        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+      <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden animate-fade-in border border-slate-100 flex flex-col max-h-[85vh]">
+        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
             <div>
-                <h2 className="text-lg font-bold text-slate-800">音源配置</h2>
-                <p className="text-xs text-slate-500 mt-0.5">管理外部音乐搜索源，点击歌曲时可跳转</p>
+                <h2 className="text-lg font-bold text-slate-800">设置 & 音源</h2>
+                <p className="text-xs text-slate-500 mt-0.5">管理外部音源与本地数据</p>
             </div>
             <button onClick={onClose} className="p-2 rounded-full hover:bg-slate-200/50 text-slate-400 hover:text-slate-800 transition-all">
                 <X size={20} />
             </button>
         </div>
 
-        <div className="p-6 max-h-[60vh] overflow-y-auto custom-scrollbar">
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
             {/* List */}
             <div className="space-y-3">
                 {sources.map(source => (
@@ -94,41 +107,65 @@ const SourceManager: React.FC<SourceManagerProps> = ({ isOpen, onClose, sources,
             </div>
         </div>
 
-        {/* Add Form */}
-        <div className="p-6 bg-slate-50 border-t border-slate-100">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">添加新源</h3>
-            <form onSubmit={handleAdd} className="flex flex-col gap-3">
-                <div className="grid grid-cols-3 gap-3">
-                    <input 
-                        type="text" 
-                        placeholder="源名称 (如: 某某音乐)" 
-                        value={newByName}
-                        onChange={e => setNewName(e.target.value)}
-                        className="col-span-1 px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-                    />
-                    <input 
-                        type="text" 
-                        placeholder="搜索链接 (关键词用 [KEY] 代替)" 
-                        value={newUrl}
-                        onChange={e => setNewUrl(e.target.value)}
-                        className="col-span-2 px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-                    />
+        {/* Bottom Section: Add Form & Reset */}
+        <div className="bg-slate-50 border-t border-slate-100 shrink-0">
+            {/* Add Form */}
+            <div className="p-6 pb-4">
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">添加新源</h3>
+                <form onSubmit={handleAdd} className="flex flex-col gap-3">
+                    <div className="grid grid-cols-3 gap-3">
+                        <input 
+                            type="text" 
+                            placeholder="源名称" 
+                            value={newByName}
+                            onChange={e => setNewName(e.target.value)}
+                            className="col-span-1 px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                        />
+                        <input 
+                            type="text" 
+                            placeholder="链接 (用 [KEY] 替代关键词)" 
+                            value={newUrl}
+                            onChange={e => setNewUrl(e.target.value)}
+                            className="col-span-2 px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                        />
+                    </div>
+                    <div className="flex items-center justify-between mt-1">
+                         <p className="text-[10px] text-slate-400 flex items-center gap-1">
+                            <AlertCircle size={10} />
+                            <span>支持自定义搜索跳转链接</span>
+                        </p>
+                        <button 
+                            type="submit" 
+                            disabled={!newByName || !newUrl}
+                            className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-200 transition-all hover:-translate-y-0.5"
+                        >
+                            <Plus size={16} />
+                            添加
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            {/* Reset Data Section */}
+            <div className="px-6 py-4 bg-slate-100/50 border-t border-slate-200/50 flex items-center justify-between">
+                <div className="flex flex-col">
+                    <span className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
+                        <RefreshCcw size={12} className={resetConfirm ? "text-red-500" : ""} />
+                        数据管理
+                    </span>
+                    <span className="text-[10px] text-slate-400 mt-0.5">清除本地缓存（收藏、历史、配置）</span>
                 </div>
-                <div className="flex items-center justify-between mt-1">
-                    <p className="text-[10px] text-slate-400 flex items-center gap-1">
-                        <AlertCircle size={10} />
-                        <span>链接将会自动拼接歌曲关键词进行跳转</span>
-                    </p>
-                    <button 
-                        type="submit" 
-                        disabled={!newByName || !newUrl}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-200 transition-all hover:-translate-y-0.5"
-                    >
-                        <Plus size={16} />
-                        添加
-                    </button>
-                </div>
-            </form>
+                <button 
+                    onClick={handleResetClick}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all duration-300 ${
+                        resetConfirm 
+                        ? 'bg-red-500 text-white shadow-lg shadow-red-200 scale-105' 
+                        : 'bg-white border border-slate-200 text-slate-500 hover:text-red-500 hover:border-red-200'
+                    }`}
+                >
+                    {resetConfirm ? '再次点击确认清除' : '重置所有数据'}
+                </button>
+            </div>
         </div>
       </div>
     </div>
