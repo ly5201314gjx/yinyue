@@ -1,7 +1,8 @@
 import { Song } from '../types';
 
 const ITUNES_API_BASE = 'https://itunes.apple.com/search';
-// Using a stable Netease Cloud Music API Mirror
+// 使用 Vercel Rewrite 路径，避免直接请求第三方域名可能带来的 SSL/CORS 问题，或者使用更稳定的公共 API
+// 这里我们保留直接链接，但建议使用支持 HTTPS 的稳定实例
 const NCM_API_BASE = 'https://ncm.zhenxin.me'; 
 
 // --- iTunes Search ---
@@ -41,12 +42,10 @@ const searchNetease = async (term: string): Promise<Song[]> => {
       artistName: song.ar?.map((a: any) => a.name).join(', ') || 'Unknown',
       collectionName: song.al?.name || '',
       artworkUrl100: song.al?.picUrl || '',
-      // We optimistically construct the URL, but we set `isFullVersion` strictly based on fee.
-      // fee 0 = Free, 8 = Free(LowQ). Others (1, 4) are VIP/Paid.
+      // Optimistic URL. Will be upgraded to real CDN URL in App.tsx playSong
       previewUrl: `https://music.163.com/song/media/outer/url?id=${song.id}.mp3`,
       trackTimeMillis: song.dt || 0,
       // CRITICAL: Only mark as full/ready if it is actually free.
-      // This forces App.tsx to run the smart fallback search for VIP songs.
       isFullVersion: song.fee === 0 || song.fee === 8, 
       source: 'netease',
       originalId: song.id,
@@ -86,6 +85,28 @@ export const getNeteaseLyrics = async (id: number): Promise<string> => {
     } catch (e) {
         console.warn("Lyrics fetch failed", e);
         return "";
+    }
+}
+
+/**
+ * 获取真实的播放链接，并尝试强制升级为 HTTPS 以避免 Mixed Content 错误。
+ */
+export const getMusicUrl = async (id: number): Promise<string> => {
+    try {
+        // 请求标准音质
+        const res = await fetch(`${NCM_API_BASE}/song/url?id=${id}`);
+        const data = await res.json();
+        const url = data.data?.[0]?.url;
+        
+        if (url) {
+            // 关键：强制将 http 替换为 https。网易云 CDN 大多支持 https。
+            return url.replace(/^http:/, 'https:');
+        }
+        // 如果 API 没有返回 URL，退回到官方外链（它通常会自动重定向，但也可能 403）
+        return `https://music.163.com/song/media/outer/url?id=${id}.mp3`;
+    } catch (e) {
+        console.warn("Fetch music url failed, fallback to outer link", e);
+        return `https://music.163.com/song/media/outer/url?id=${id}.mp3`;
     }
 }
 
@@ -167,7 +188,8 @@ export const findNeteaseMusic = async (trackName: string, artistName: string): P
                 continue; 
             }
 
-            const songUrl = `https://music.163.com/song/media/outer/url?id=${ncmSongId}.mp3`;
+            // Get Real HTTPS URL
+            const songUrl = await getMusicUrl(ncmSongId);
             const rawLyrics = await getNeteaseLyrics(ncmSongId);
 
             console.log(`[MusicService] Found playable version for "${trackName}": ${song.name} (ID: ${ncmSongId})`);

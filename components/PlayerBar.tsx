@@ -182,6 +182,9 @@ const PlayerBar: React.FC<PlayerBarProps> = ({
       <audio
         ref={audioRef}
         preload="auto"
+        crossOrigin="anonymous"
+        // @ts-ignore
+        referrerPolicy="no-referrer"
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={(e) => onDurationChange(e.currentTarget.duration)}
         onCanPlay={handleCanPlay}

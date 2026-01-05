@@ -5,7 +5,7 @@ import SongCard from './components/SongCard';
 import AILyricsPanel from './components/AILyricsPanel';
 import SourceManager from './components/SourceManager';
 import PlaylistDrawer from './components/PlaylistDrawer';
-import { searchMusic, getTopCharts, findNeteaseMusic, getNeteaseLyrics } from './services/music';
+import { searchMusic, getTopCharts, findNeteaseMusic, getNeteaseLyrics, getMusicUrl } from './services/music';
 import { Song, PlayerState, ViewMode, MusicSource, PlayMode } from './types';
 import { Search, Music, Heart, Clock, Menu, ListFilter, User, X, Loader2, RefreshCw } from 'lucide-react';
 
@@ -261,32 +261,25 @@ function App() {
   const playSong = async (song: Song, options: PlayOptions = {}) => {
     const { forceReload = false, keepQueue = false, toggle = true } = options;
 
-    // Determine the queue: if from main list click, update queue. If internal play (next/prev), keep queue.
     if (!keepQueue) {
-        // If clicking from a list, update the playback queue to match current filtered view
         setPlaybackQueue(displayedSongs);
     }
 
-    const playId = Date.now(); // Generate a new Play ID for every play request
+    const playId = Date.now(); 
 
-    // Check if same song
     if (!forceReload && playerState.currentSong?.trackId === song.trackId) {
-        // If toggle is true (manual play/pause click), we just toggle state
         if (toggle) {
             setPlayerState(prev => ({
                 ...prev,
                 isPlaying: !prev.isPlaying
             }));
             return;
-        } 
-        // If toggle is false (e.g. Next Button, or Auto Loop), we want to force replay.
-        // We update the currentSong with a new _playId to trigger effects in PlayerBar.
-        else {
+        } else {
              setPlayerState(prev => ({
                 ...prev,
                 currentSong: { ...prev.currentSong!, _playId: playId },
                 isPlaying: true,
-                currentTime: 0 // Optimistic reset
+                currentTime: 0 
             }));
             return;
         }
@@ -294,7 +287,6 @@ function App() {
 
     const loadingSong = { 
         ...song, 
-        // If forceReload is true, we wipe the previewUrl to force a new fetch.
         previewUrl: (forceReload) ? '' : song.previewUrl,
         _playId: playId
     };
@@ -312,40 +304,40 @@ function App() {
 
     let songToPlay: Song | null = null;
 
-    // IMPORTANT: Always try to find a "Playable" version now if not explicitly marked full.
-    // The previous implementation trusted 'isFullVersion' too much.
-    // Now 'isFullVersion' is strictly checked against fee=0/8 in searchNetease.
-    
-    // Fast path: Only if verified as FREE full version.
-    if (!forceReload && song.isFullVersion && song.previewUrl) {
-        songToPlay = { ...song, _playId: playId };
-        
-        // Lazy lyrics fetch
-        if (song.source === 'netease' && !song.lyrics) {
-             getNeteaseLyrics(song.trackId).then(lyrics => {
-                 if(lyrics && songToPlay) updateSongInLists({ ...songToPlay, lyrics });
-             }).catch(console.warn);
+    // Determine how to get the play URL
+    if (!forceReload && song.isFullVersion && song.source === 'netease') {
+        // FAST PATH: It's free, but we MUST fetch the real HTTPS URL to avoid mixed content on Vercel
+        try {
+            const realUrl = await getMusicUrl(song.trackId);
+            songToPlay = { 
+                ...song, 
+                previewUrl: realUrl, 
+                _playId: playId 
+            };
+            
+            // Lazy lyrics
+            if (!song.lyrics) {
+                 getNeteaseLyrics(song.trackId).then(lyrics => {
+                     if(lyrics && songToPlay) updateSongInLists({ ...songToPlay, lyrics });
+                 }).catch(console.warn);
+            }
+        } catch (e) {
+             console.warn("Failed to resolve real URL, trying fallback", e);
+             songToPlay = { ...song, _playId: playId };
         }
+        
+    } else if (!forceReload && song.isFullVersion) {
+        // iTunes or other sources that are already fully populated
+        songToPlay = { ...song, _playId: playId };
 
     } else {
-        // Slow path: It's VIP (fee=1/4) or snippet.
-        // Trigger smart search to ensure we get a FREE/LIVE/COVER version.
+        // SLOW PATH: VIP/Paid -> Search fallback
         try {
             const fullData = await findNeteaseMusic(song.trackName, song.artistName);
-            
             if (fullData && fullData.url) {
                 songToPlay = {
                     ...song,
-                    // IMPORTANT: We KEEP the original trackId so the UI doesn't jump or lose highlight.
-                    // We are just swapping the underlying audio source.
                     trackId: song.trackId, 
-                    
-                    // We also keep the original Name/Artist to prevent the UI from flashing a different name
-                    // unless you want to explicitly show it's a cover.
-                    // For stability, we keep original metadata but play the fallback audio.
-                    // trackName: fullData.name, 
-                    // artistName: fullData.artist,
-                    
                     previewUrl: fullData.url,
                     isFullVersion: true,
                     lyrics: fullData.lyrics,
@@ -354,7 +346,6 @@ function App() {
                     _playId: playId
                 };
             } else {
-                // Fallback: Use what we have if search failed
                 console.warn("Smart search failed, falling back to original source.");
                 songToPlay = { ...song, _playId: playId };
             }
@@ -365,8 +356,6 @@ function App() {
     }
 
     setPlayerState(prev => {
-        // Ensure we are still trying to play *this* song (race condition check)
-        // We check playId implicitly via closure scope
         if (songToPlay) {
             return {
                 ...prev,
@@ -395,14 +384,11 @@ function App() {
   const handlePlayError = () => {
       if (playerState.currentSong) {
           console.log("Playback error detected.");
-          // STOP playback on error instead of jumping to next song.
-          // This fixes the "jumping to other songs" issue.
           setPlayerState(prev => ({
               ...prev,
               isPlaying: false,
               isLoading: false
           }));
-          // Optional: You could show a toast here "Playback failed"
       }
   };
 
@@ -431,10 +417,8 @@ function App() {
   const handleNext = (isAuto = false) => {
     isAutoPlayRef.current = isAuto;
     
-    // Safety check for empty queue or no song
     if (playbackQueue.length === 0) return;
 
-    // Use current song from state, or fallback to first in queue
     const currentId = playerState.currentSong?.trackId;
     const len = playbackQueue.length;
     const currentIndex = currentId ? playbackQueue.findIndex(s => s.trackId === currentId) : -1;
@@ -442,29 +426,23 @@ function App() {
     let nextIndex = -1;
 
     if (playMode === 'single') {
-        // Single Loop
         if (isAuto) {
-            // Song ended naturally -> Replay same song
             if (playerState.currentSong) {
                 playSong(playerState.currentSong, { keepQueue: true, toggle: false });
             }
             return;
         } else {
-            // Manual click -> Go to next song (Standard behavior)
             if (currentIndex !== -1) nextIndex = (currentIndex + 1) % len;
         }
     } else if (playMode === 'shuffle') {
-        // Shuffle: Pick random index
         if (len === 1) {
             nextIndex = 0;
         } else {
-            // Simple random distinct from current
             do {
                 nextIndex = Math.floor(Math.random() * len);
             } while (len > 1 && nextIndex === currentIndex);
         }
     } else {
-        // Sequence (Loop List): 1->2->3->1
         if (currentIndex !== -1) {
             nextIndex = (currentIndex + 1) % len;
         }
@@ -473,7 +451,6 @@ function App() {
     if (nextIndex !== -1) {
         playSong(playbackQueue[nextIndex], { keepQueue: true, toggle: false });
     } else {
-        // Fallback: If current index not found or error, restart list from 0
         playSong(playbackQueue[0], { keepQueue: true, toggle: false });
     }
   };
@@ -486,7 +463,6 @@ function App() {
     let prevIndex = -1;
 
     if (playMode === 'shuffle') {
-         // Shuffle prev: Random again
          if (len === 1) {
              prevIndex = 0;
          } else {
@@ -495,7 +471,6 @@ function App() {
              } while (len > 1 && prevIndex === currentIndex);
          }
     } else {
-         // Loop List or Single (Manual prev goes to prev song)
          if (currentIndex !== -1) {
             prevIndex = (currentIndex - 1 + len) % len;
          }
@@ -524,14 +499,12 @@ function App() {
 
   const isLiked = (songId: number) => likedSongs.some(s => s.trackId === songId);
 
-  // --- Media Session API Implementation ---
   useEffect(() => {
     if (!('mediaSession' in navigator)) return;
     
     const { currentSong, isPlaying } = playerState;
 
     if (currentSong) {
-      // 1. Update Metadata (Title, Artist, Artwork)
       navigator.mediaSession.metadata = new MediaMetadata({
         title: currentSong.trackName,
         artist: currentSong.artistName,
@@ -546,17 +519,12 @@ function App() {
         ]
       });
 
-      // 2. Update Playback State
       navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
 
-      // 3. Set Action Handlers
-      // We wrap these in functions to ensure they access the latest state/logic via the effect dependencies
       navigator.mediaSession.setActionHandler('play', () => togglePlayPause());
       navigator.mediaSession.setActionHandler('pause', () => togglePlayPause());
       navigator.mediaSession.setActionHandler('previoustrack', () => handlePrev());
       navigator.mediaSession.setActionHandler('nexttrack', () => handleNext(false));
-      
-      // Note: "Collect/Like" is not a standard MediaSession action supported in system notifications.
     }
   }, [playerState.currentSong, playerState.isPlaying, handleNext, handlePrev, togglePlayPause]);
 
@@ -588,7 +556,7 @@ function App() {
           onClose={() => setIsPlaylistOpen(false)}
           queue={playbackQueue}
           currentSong={playerState.currentSong}
-          onPlay={(s) => playSong(s, { keepQueue: true, toggle: false })} // Click in queue = always play
+          onPlay={(s) => playSong(s, { keepQueue: true, toggle: false })} 
           onClearQueue={() => setPlaybackQueue([])}
           playMode={playMode}
       />
@@ -652,7 +620,7 @@ function App() {
                 {view === ViewMode.HOME && <p className="text-slate-500 text-sm font-medium">今日热门流行金曲</p>}
             </div>
 
-            {/* Secondary Filter Bar - Visible only in Search View and when results exist */}
+            {/* Secondary Filter Bar */}
             {view === ViewMode.SEARCH && !loading && searchResultSongs.length > 0 && (
                 <div className="flex flex-col gap-3 mt-2 animate-fade-in">
                     <div className="flex flex-wrap items-center gap-3">
@@ -736,7 +704,6 @@ function App() {
             </div>
           ) : (
             <>
-                {/* Modified Grid: 3 columns on mobile (grid-cols-3), 4 on md, 5 on lg */}
                 <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 md:gap-6 max-w-[1600px] mx-auto">
                 {displayedSongs.map(song => (
                     <SongCard 
@@ -745,13 +712,12 @@ function App() {
                     isPlaying={playerState.currentSong?.trackId === song.trackId && playerState.isPlaying}
                     isLoading={playerState.currentSong?.trackId === song.trackId && playerState.isLoading}
                     isLiked={isLiked(song.trackId)}
-                    onPlay={(s) => playSong(s, { keepQueue: false, toggle: true })} // Click from list -> update queue, allow toggle
+                    onPlay={(s) => playSong(s, { keepQueue: false, toggle: true })} 
                     onToggleLike={toggleLike}
                     />
                 ))}
                 </div>
 
-                {/* Empty States */}
                 {!loading && displayedSongs.length === 0 && (
                     <div className="flex flex-col items-center justify-center py-20 md:py-32 text-slate-400 gap-4 text-center">
                         {view === ViewMode.LIBRARY ? (
