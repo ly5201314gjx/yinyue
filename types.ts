@@ -12,6 +12,7 @@ export interface Song {
   lyrics?: string; // Lyrics from external API
   source?: 'itunes' | 'netease'; // Origin of the song data
   _playId?: number; // Timestamp to force effect updates for replaying same song
+  fee?: number; // 0: Free, 1: VIP, 4: Paid Album, 8: Free(LowQ)
 }
 
 export type PlayMode = 'sequence' | 'shuffle' | 'single';

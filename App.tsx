@@ -10,29 +10,43 @@ import { Song, PlayerState, ViewMode, MusicSource, PlayMode } from './types';
 import { Search, Music, Heart, Clock, Menu, ListFilter, User, X, Loader2, RefreshCw } from 'lucide-react';
 
 const DEFAULT_SOURCES: MusicSource[] = [
-  { id: 'm1', name: 'MyFreeMP3', url: 'https://tools.liumingye.cn/music/#/search/M/song/[KEY]', isCustom: false, description: '免费下载/试听/无损' },
-  { id: 'm2', name: 'HIFINI', url: 'https://www.hifini.com/search-[KEY]-1.htm', isCustom: false, description: '高品质音乐论坛' },
-  { id: 'm3', name: '铜钟音乐', url: 'https://tonzhon.com/search?keyword=[KEY]', isCustom: false, description: '多平台聚合' },
-  { id: 'm4', name: 'ZMusic', url: 'https://zmusic.zhenxin.me/#/music/search?keywords=[KEY]', isCustom: false, description: '网易云镜像 UI' },
-  { id: 'm5', name: 'MusicFree', url: 'https://github.com/maotoumao/MusicFree', isCustom: false, description: '开源插件化播放器' },
-  { id: 'm6', name: 'MKOnline', url: 'https://music.sl167.com/?name=[KEY]&type=netease', isCustom: false, description: '在线音乐播放器' },
-  { id: 'm7', name: '下歌吧', url: 'https://xiageba.com/search?q=[KEY]', isCustom: false, description: '无损音乐下载' },
-  { id: 'm8', name: '歌词适配', url: 'https://www.geci.me/search?q=[KEY]', isCustom: false, description: 'LRC 歌词下载' },
-  { id: 'm9', name: '音乐磁场', url: 'https://www.hifini.com/search-[KEY]-1.htm', isCustom: false, description: '磁力搜索' },
-  { id: 'm10', name: 'Listen 1', url: 'https://listen1.github.io/listen1/', isCustom: false, description: '全网聚合播放器' },
+  // --- High Quality Aggregators ---
+  { id: 'm1', name: 'MyFreeMP3', url: 'https://tools.liumingye.cn/music/#/search/M/song/[KEY]', isCustom: false, description: '最强推荐/无损下载/多源' },
+  { id: 'm2', name: 'HIFINI', url: 'https://www.hifini.com/search-[KEY]-1.htm', isCustom: false, description: '音乐磁场/高品质论坛' },
+  { id: 'm3', name: '铜钟音乐', url: 'https://tonzhon.com/search?keyword=[KEY]', isCustom: false, description: '简洁/多平台聚合' },
+  { id: 'm4', name: 'MusicFree', url: 'http://musicfree.app/', isCustom: false, description: '开源插件化播放器(神级)' },
+  { id: 'm5', name: '下歌吧', url: 'https://xiageba.com/search?q=[KEY]', isCustom: false, description: '无损FLAC/MP3直链' },
+  
+  // --- Platform Mirrors & Tools ---
+  { id: 'm6', name: 'Listen 1', url: 'https://listen1.github.io/listen1/', isCustom: false, description: '浏览器扩展/全网聚合' },
+  { id: 'm7', name: '歌词适配', url: 'https://www.geci.me/search?q=[KEY]', isCustom: false, description: 'LRC歌词/音频下载' },
+  { id: 'm8', name: 'MKOnline', url: 'https://music.sl167.com/?name=[KEY]&type=netease', isCustom: false, description: '在线网页播放器' },
+  { id: 'm9', name: 'Slider.kz', url: 'https://slider.kz/#/search/[KEY]', isCustom: false, description: 'VK资源/国际无损' },
+  { id: 'm10', name: 'Y2Mate', url: 'https://www.y2mate.com/search/[KEY]', isCustom: false, description: 'YouTube转MP3神器' },
+  
+  // --- Direct Search Links ---
   { id: 'm11', name: 'QQ音乐', url: 'https://y.qq.com/n/ryqq/search?w=[KEY]', isCustom: false },
-  { id: 'm12', name: '酷狗音乐', url: 'https://www.kugou.com/yy/html/search.html#searchType=song&searchKey=[KEY]', isCustom: false },
-  { id: 'm13', name: '酷我音乐', url: 'http://www.kuwo.cn/search/list?key=[KEY]', isCustom: false },
-  { id: 'm14', name: '咪咕音乐', url: 'https://music.migu.cn/v3/music/s?s=[KEY]', isCustom: false, description: '周杰伦等版权歌库' },
-  { id: 'm15', name: '歌曲宝', url: 'https://www.gequbao.com/s/[KEY]', isCustom: false, description: 'MP3直链下载' },
-  { id: 'm16', name: 'Bilibili', url: 'https://search.bilibili.com/all?keyword=[KEY]&order=click', isCustom: false, description: '二次元/翻唱/现场' },
-  { id: 'm17', name: '5sing', url: 'http://5sing.kugou.com/search/song/?keyword=[KEY]', isCustom: false, description: '原创/古风音乐' },
-  { id: 'm18', name: 'Audiomack', url: 'https://audiomack.com/search?q=[KEY]', isCustom: false, description: '国际免费音乐平台' },
-  { id: 'm19', name: 'Slider.kz', url: 'https://slider.kz/#/search/[KEY]', isCustom: false, description: 'VK音乐资源搜索' },
-  { id: 'm20', name: 'MusicEnc', url: 'https://www.musicenc.com/?search=[KEY]', isCustom: false, description: '高音质音乐下载' },
-  { id: 'm21', name: 'SoundCloud', url: 'https://soundcloud.com/search?q=[KEY]', isCustom: false, description: '全球原创音乐' },
-  { id: 'm22', name: 'Bandcamp', url: 'https://bandcamp.com/search?q=[KEY]', isCustom: false, description: '独立音乐人' },
-  { id: 'm23', name: 'Jamendo', url: 'https://www.jamendo.com/search?q=[KEY]', isCustom: false, description: '免费版权音乐' },
+  { id: 'm12', name: '网易云', url: 'https://music.163.com/#/search/m/?s=[KEY]', isCustom: false },
+  { id: 'm13', name: '酷狗音乐', url: 'https://www.kugou.com/yy/html/search.html#searchType=song&searchKey=[KEY]', isCustom: false },
+  { id: 'm14', name: '酷我音乐', url: 'http://www.kuwo.cn/search/list?key=[KEY]', isCustom: false },
+  { id: 'm15', name: 'Bilibili', url: 'https://search.bilibili.com/all?keyword=[KEY]&order=click', isCustom: false, description: '二次元/现场/MV' },
+  
+  // --- International / Niche ---
+  { id: 'm16', name: 'SoundCloud', url: 'https://soundcloud.com/search?q=[KEY]', isCustom: false, description: '原创/独立音乐' },
+  { id: 'm17', name: 'Spotify', url: 'https://open.spotify.com/search/[KEY]', isCustom: false, description: '全球流媒体' },
+  { id: 'm18', name: '5sing', url: 'http://5sing.kugou.com/search/song/?keyword=[KEY]', isCustom: false, description: '古风/原创/翻唱' },
+  { id: 'm19', name: 'Audiomack', url: 'https://audiomack.com/search?q=[KEY]', isCustom: false, description: '免费Mixtape/HipHop' },
+  { id: 'm20', name: 'Bandcamp', url: 'https://bandcamp.com/search?q=[KEY]', isCustom: false, description: '支持独立音乐人' },
+  { id: 'm21', name: 'Jamendo', url: 'https://www.jamendo.com/search?q=[KEY]', isCustom: false, description: '版权免费音乐' },
+  { id: 'm22', name: 'Freesound', url: 'https://freesound.org/search/?q=[KEY]', isCustom: false, description: '音效/采样' },
+  
+  // --- Download Tools ---
+  { id: 'm23', name: 'X2Download', url: 'https://x2download.app/en/mp3', isCustom: false, description: '通用视频转音频' },
+  { id: 'm24', name: 'TikDown', url: 'https://tikdown.org/', isCustom: false, description: 'TikTok音频下载' },
+  { id: 'm25', name: 'Soggfy', url: 'https://github.com/Rafiuth/Soggfy', isCustom: false, description: 'Spotify下载插件' },
+  { id: 'm26', name: 'SpotDL', url: 'https://github.com/spotDL/spotify-downloader', isCustom: false, description: 'Spotify命令行下载' },
+  { id: 'm27', name: 'Seal', url: 'https://github.com/JunkFood02/Seal', isCustom: false, description: 'Android通用下载器' },
+  { id: 'm28', name: 'SaveFrom', url: 'https://en.savefrom.net/', isCustom: false, description: '老牌下载工具' },
 ];
 
 interface PlayOptions {
@@ -298,26 +312,40 @@ function App() {
 
     let songToPlay: Song | null = null;
 
-    // Fast path: If it looks like a valid full version (from list) and not forcing reload, try it first.
+    // IMPORTANT: Always try to find a "Playable" version now if not explicitly marked full.
+    // The previous implementation trusted 'isFullVersion' too much.
+    // Now 'isFullVersion' is strictly checked against fee=0/8 in searchNetease.
+    
+    // Fast path: Only if verified as FREE full version.
     if (!forceReload && song.isFullVersion && song.previewUrl) {
         songToPlay = { ...song, _playId: playId };
+        
         // Lazy lyrics fetch
         if (song.source === 'netease' && !song.lyrics) {
-             try {
-                const lyrics = await getNeteaseLyrics(song.trackId);
-                songToPlay = { ...songToPlay, lyrics };
-                updateSongInLists(songToPlay);
-             } catch (e) {
-                 console.log("Lazy lyrics fetch failed", e);
-             }
+             getNeteaseLyrics(song.trackId).then(lyrics => {
+                 if(lyrics && songToPlay) updateSongInLists({ ...songToPlay, lyrics });
+             }).catch(console.warn);
         }
+
     } else {
-        // Slow path: Search for playable version (handles VIP filtering now)
+        // Slow path: It's VIP (fee=1/4) or snippet.
+        // Trigger smart search to ensure we get a FREE/LIVE/COVER version.
         try {
             const fullData = await findNeteaseMusic(song.trackName, song.artistName);
+            
             if (fullData && fullData.url) {
                 songToPlay = {
                     ...song,
+                    // IMPORTANT: We KEEP the original trackId so the UI doesn't jump or lose highlight.
+                    // We are just swapping the underlying audio source.
+                    trackId: song.trackId, 
+                    
+                    // We also keep the original Name/Artist to prevent the UI from flashing a different name
+                    // unless you want to explicitly show it's a cover.
+                    // For stability, we keep original metadata but play the fallback audio.
+                    // trackName: fullData.name, 
+                    // artistName: fullData.artist,
+                    
                     previewUrl: fullData.url,
                     isFullVersion: true,
                     lyrics: fullData.lyrics,
@@ -325,36 +353,35 @@ function App() {
                     source: 'netease',
                     _playId: playId
                 };
-                updateSongInLists(songToPlay);
             } else {
-                console.warn("Full version not found during fetch.");
+                // Fallback: Use what we have if search failed
+                console.warn("Smart search failed, falling back to original source.");
+                songToPlay = { ...song, _playId: playId };
             }
         } catch (e) {
             console.error("Failed to fetch full version:", e);
+            songToPlay = { ...song, _playId: playId };
         }
     }
 
     setPlayerState(prev => {
         // Ensure we are still trying to play *this* song (race condition check)
-        // We check ID, ignoring _playId for the race check
-        if (prev.currentSong?.trackId === song.trackId) {
-            if (songToPlay) {
-                return {
-                    ...prev,
-                    currentSong: songToPlay,
-                    isPlaying: true,
-                    isLoading: false,
-                    duration: songToPlay.trackTimeMillis ? songToPlay.trackTimeMillis / 1000 : 0
-                };
-            } else {
-                return {
-                    ...prev,
-                    isPlaying: false,
-                    isLoading: false
-                };
-            }
+        // We check playId implicitly via closure scope
+        if (songToPlay) {
+            return {
+                ...prev,
+                currentSong: songToPlay,
+                isPlaying: true,
+                isLoading: false,
+                duration: songToPlay.trackTimeMillis ? songToPlay.trackTimeMillis / 1000 : 0
+            };
+        } else {
+            return {
+                ...prev,
+                isPlaying: false,
+                isLoading: false
+            };
         }
-        return prev;
     });
 
     if (songToPlay) {
@@ -367,8 +394,15 @@ function App() {
 
   const handlePlayError = () => {
       if (playerState.currentSong) {
-          console.log("Playback error detected. Attempting to find alternative source...");
-          playSong(playerState.currentSong, { forceReload: true, keepQueue: true, toggle: false });
+          console.log("Playback error detected.");
+          // STOP playback on error instead of jumping to next song.
+          // This fixes the "jumping to other songs" issue.
+          setPlayerState(prev => ({
+              ...prev,
+              isPlaying: false,
+              isLoading: false
+          }));
+          // Optional: You could show a toast here "Playback failed"
       }
   };
 

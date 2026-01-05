@@ -1,7 +1,7 @@
 import { Song } from '../types';
 
 const ITUNES_API_BASE = 'https://itunes.apple.com/search';
-// Public Netease Cloud Music API instance
+// Using a stable Netease Cloud Music API Mirror
 const NCM_API_BASE = 'https://ncm.zhenxin.me'; 
 
 // --- iTunes Search ---
@@ -18,7 +18,7 @@ const searchItunes = async (term: string): Promise<Song[]> => {
         source: 'itunes'
     }));
   } catch (error) {
-    console.error("iTunes Search failed:", error);
+    console.warn("iTunes Search failed:", error);
     return [];
   }
 };
@@ -41,16 +41,19 @@ const searchNetease = async (term: string): Promise<Song[]> => {
       artistName: song.ar?.map((a: any) => a.name).join(', ') || 'Unknown',
       collectionName: song.al?.name || '',
       artworkUrl100: song.al?.picUrl || '',
-      // Construct direct URL. This is optimistic.
+      // We optimistically construct the URL, but we set `isFullVersion` strictly based on fee.
+      // fee 0 = Free, 8 = Free(LowQ). Others (1, 4) are VIP/Paid.
       previewUrl: `https://music.163.com/song/media/outer/url?id=${song.id}.mp3`,
       trackTimeMillis: song.dt || 0,
-      isFullVersion: true,
+      // CRITICAL: Only mark as full/ready if it is actually free.
+      // This forces App.tsx to run the smart fallback search for VIP songs.
+      isFullVersion: song.fee === 0 || song.fee === 8, 
       source: 'netease',
-      // We store the original ID to use for detail checks later if needed
-      originalId: song.id 
+      originalId: song.id,
+      fee: song.fee 
     }));
   } catch (error) {
-    console.error("Netease Search failed:", error);
+    console.warn("Netease Search failed:", error);
     return [];
   }
 };
@@ -65,6 +68,7 @@ export const searchMusic = async (term: string): Promise<Song[]> => {
     searchItunes(term)
   ]);
 
+  // Interleave results or prioritize NCM for Asian content
   return [...ncmResults, ...itunesResults];
 };
 
@@ -91,12 +95,13 @@ const cleanTitle = (title: string) => {
     .replace(/\[.*\]/g, '') 
     .replace(/feat\..*/i, '')
     .replace(/ft\..*/i, '')
-    .replace(/-.*remaster.*/i, '')
-    .replace(/version/i, '')
     .trim();
 }
 
-// Check privileges to avoid VIP songs that won't play
+/**
+ * Checks song details to filter out VIP/Paid songs that cannot be played directly.
+ * Fee: 0=Free, 8=Free(LowQ), 1=VIP, 4=PaidAlbum
+ */
 const checkSongDetails = async (ids: number[]): Promise<Set<number>> => {
     if (ids.length === 0) return new Set();
     try {
@@ -105,41 +110,42 @@ const checkSongDetails = async (ids: number[]): Promise<Set<number>> => {
         const playableIds = new Set<number>();
         
         data.songs?.forEach((song: any) => {
-            // fee: 0 = free, 8 = free/low-quality, 1 = VIP, 4 = Paid Album
-            // We generally want to avoid 1 and 4 for direct playback
-            if (song.fee !== 1 && song.fee !== 4) {
+            // Strictly allow only Free (0) or Free LowQ (8)
+            if (song.fee === 0 || song.fee === 8) {
                 playableIds.add(song.id);
             }
         });
         return playableIds;
     } catch (e) {
         console.warn("Detail check failed", e);
-        // If check fails, assume all are okay to try
         return new Set(ids);
     }
 }
 
-export const findNeteaseMusic = async (trackName: string, artistName: string): Promise<{ url: string, lyrics: string, duration: number } | null> => {
+/**
+ * Intelligent Song Finder
+ * Returns full metadata including Name/Artist because we might switch to a Cover version.
+ */
+export const findNeteaseMusic = async (trackName: string, artistName: string): Promise<{ url: string, lyrics: string, duration: number, id: number, name: string, artist: string } | null> => {
   const cleanTrack = cleanTitle(trackName);
-  // Strategy: 
-  // 1. Exact match
-  // 2. Clean title match
-  // 3. If standard search fails/is VIP, try searching for "Cover" or "Live" versions which are often free
-  const queries = [
-      `${trackName} ${artistName}`,
-      `${cleanTrack} ${artistName}`,
-      `${cleanTrack}`
+  
+  // Search Strategies
+  const searchQueries = [
+      `${trackName} ${artistName}`, // 1. Exact
+      `${cleanTrack} ${artistName}`, // 2. Clean Exact
+      `${cleanTrack} 翻唱`,          // 3. Cover (High success rate for VIP songs)
+      `${cleanTrack} Live`,           // 4. Live
+      `${cleanTrack} Remix`,
+      `${cleanTrack}`                 // 5. Broad
   ];
   
-  const uniqueQueries = [...new Set(queries)];
+  // Dedup queries
+  const uniqueQueries = [...new Set(searchQueries)];
 
   for (const q of uniqueQueries) {
       try {
         const query = encodeURIComponent(q);
-        const timestamp = Date.now();
-        
-        // Fetch more results to increase chance of finding a free version
-        const searchRes = await fetch(`${NCM_API_BASE}/cloudsearch?keywords=${query}&limit=6&timestamp=${timestamp}`);
+        const searchRes = await fetch(`${NCM_API_BASE}/cloudsearch?keywords=${query}&limit=6`);
         const searchData = await searchRes.json();
         const songs = searchData.result?.songs || [];
         
@@ -148,35 +154,39 @@ export const findNeteaseMusic = async (trackName: string, artistName: string): P
         const songIds = songs.map((s: any) => s.id);
         const playableIds = await checkSongDetails(songIds);
 
-        // Iterate through songs and pick the first playable one
+        // Iterate through songs and pick the best playable one
         for (const song of songs) {
             const ncmSongId = song.id;
             const ncmDuration = song.dt ? song.dt / 1000 : 0; 
             
-            // Skip very short clips
-            if (ncmDuration < 60) continue;
+            // Skip very short clips (< 45s) unless it looks like a skit
+            if (ncmDuration < 45) continue;
 
-            // Prioritize playable songs
+            // CRITICAL: Only accept songs confirmed as playable
             if (!playableIds.has(ncmSongId)) {
-                // If this is the only result, we might try it anyway, but let's prefer others first.
-                // If we are at the last query and haven't found anything, maybe just return this one?
-                // For now, strict skipping of VIP to ensure "Playable"
                 continue; 
             }
 
-            // Direct URL
             const songUrl = `https://music.163.com/song/media/outer/url?id=${ncmSongId}.mp3`;
             const rawLyrics = await getNeteaseLyrics(ncmSongId);
+
+            console.log(`[MusicService] Found playable version for "${trackName}": ${song.name} (ID: ${ncmSongId})`);
 
             return {
                 url: songUrl,
                 lyrics: rawLyrics,
-                duration: ncmDuration
+                duration: ncmDuration,
+                id: ncmSongId,
+                name: song.name, // Return actual name (e.g. "Song (Live)")
+                artist: song.ar?.map((a: any) => a.name).join(', ') || 'Unknown'
             };
         }
       } catch (error) {
-        console.error(`Netease API Error for query "${q}":`, error);
+        console.error(`Netease API Search Error for query "${q}":`, error);
       }
+      
+      // Small delay between strategies
+      await new Promise(r => setTimeout(r, 100));
   }
   
   return null;
