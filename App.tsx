@@ -449,6 +449,10 @@ function App() {
           });
       }
   };
+  
+  const handleRemoveFromQueue = (trackIdsToRemove: number[]) => {
+      setPlaybackQueue(prev => prev.filter(song => !trackIdsToRemove.includes(song.trackId)));
+  };
 
   const togglePlayPause = () => {
     setPlayerState(prev => ({ ...prev, isPlaying: !prev.isPlaying }));
@@ -630,6 +634,7 @@ function App() {
           currentSong={playerState.currentSong}
           onPlay={(s) => playSong(s, { keepQueue: true, toggle: false })} 
           onClearQueue={() => setPlaybackQueue([])}
+          onRemoveSongs={handleRemoveFromQueue}
           playMode={playMode}
       />
       
@@ -874,6 +879,7 @@ function App() {
             onClose={() => setIsLyricsOpen(false)} 
             song={playerState.currentSong}
             currentTime={playerState.currentTime}
+            duration={playerState.duration}
             onSeek={handleLyricsSeek}
         />
 

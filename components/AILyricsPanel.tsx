@@ -7,6 +7,7 @@ interface AILyricsPanelProps {
   isOpen: boolean;
   onClose: () => void;
   currentTime: number;
+  duration?: number;
   onSeek: (time: number) => void;
 }
 
@@ -38,12 +39,23 @@ const parseLrc = (lrc: string): LyricLine[] => {
     return result;
 };
 
-const AILyricsPanel: React.FC<AILyricsPanelProps> = ({ song, isOpen, onClose, currentTime, onSeek }) => {
+const formatTime = (seconds: number): string => {
+    if (isNaN(seconds)) return "0:00";
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+};
+
+const AILyricsPanel: React.FC<AILyricsPanelProps> = ({ song, isOpen, onClose, currentTime, duration = 0, onSeek }) => {
   const [lyricsLines, setLyricsLines] = useState<LyricLine[]>([]);
   const [activeLineIndex, setActiveLineIndex] = useState<number>(-1);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const activeLineRef = useRef<HTMLDivElement>(null);
   
+  // Seek bar state
+  const [isDragging, setIsDragging] = useState(false);
+  const [localSeekValue, setLocalSeekValue] = useState(0);
+
   // Triple click detection refs
   const clickCountRef = useRef(0);
   const lastClickTimeRef = useRef(0);
@@ -79,6 +91,13 @@ const AILyricsPanel: React.FC<AILyricsPanelProps> = ({ song, isOpen, onClose, cu
           });
       }
   }, [activeLineIndex]);
+  
+  // Sync seek slider with current time when not dragging
+  useEffect(() => {
+      if (!isDragging) {
+          setLocalSeekValue(currentTime);
+      }
+  }, [currentTime, isDragging]);
 
   const handleLineClick = (time: number) => {
       const now = Date.now();
@@ -98,6 +117,15 @@ const AILyricsPanel: React.FC<AILyricsPanelProps> = ({ song, isOpen, onClose, cu
       }
   };
 
+  const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      setLocalSeekValue(parseFloat(e.target.value));
+  };
+
+  const handleSeekEnd = () => {
+      setIsDragging(false);
+      onSeek(localSeekValue);
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -108,22 +136,20 @@ const AILyricsPanel: React.FC<AILyricsPanelProps> = ({ song, isOpen, onClose, cu
         
         {/* Header - Cleaned up */}
         <div className="p-5 flex items-start justify-end bg-white/95 backdrop-blur-md z-10 shrink-0 sticky top-0">
-            {/* Left side info removed as requested */}
-            
             {/* Close Button - Moved down slightly with mt-2 */}
             <button onClick={onClose} className="w-10 h-10 mt-4 rounded-full flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition-all">
                 <X size={22} />
             </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-0 scroll-smooth bg-[#fdfdfd] custom-scrollbar" ref={scrollContainerRef}>
+        <div className="flex-1 overflow-y-auto p-0 scroll-smooth bg-[#fdfdfd] custom-scrollbar relative" ref={scrollContainerRef}>
             {!song ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-4">
                 <Disc size={64} className="opacity-20" />
                 <p className="font-bold">请选择一首歌曲开始播放</p>
             </div>
             ) : (
-            <div className="animate-fade-in pb-24">
+            <div className="animate-fade-in pb-32">
                 {/* Artwork Section */}
                 <div className="px-8 pt-4 pb-8 flex flex-col items-center text-center bg-gradient-to-b from-white via-slate-50/50 to-[#fdfdfd]">
                     <div className="relative group mb-8">
@@ -185,6 +211,47 @@ const AILyricsPanel: React.FC<AILyricsPanelProps> = ({ song, isOpen, onClose, cu
             </div>
             )}
         </div>
+        
+        {/* Floating Progress Bar Control */}
+        {song && (
+            <div className="absolute bottom-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-t border-slate-200/60 p-6 pb-safe z-20">
+                <div className="flex items-center gap-3 mb-1">
+                    <span className="text-[10px] font-bold text-slate-400 w-8 text-right tabular-nums">{formatTime(localSeekValue)}</span>
+                    <div className="flex-1 h-8 flex items-center group relative">
+                         {/* Track */}
+                        <div className="absolute inset-x-0 h-1 bg-slate-200 rounded-full overflow-hidden">
+                            <div 
+                                className="h-full bg-slate-800 rounded-full"
+                                style={{ width: `${(localSeekValue / (duration || 1)) * 100}%` }}
+                            />
+                        </div>
+                        {/* Input */}
+                        <input
+                            type="range"
+                            min="0"
+                            max={duration || 100}
+                            step="0.1"
+                            value={localSeekValue}
+                            onChange={handleSeekChange}
+                            onMouseDown={() => setIsDragging(true)}
+                            onMouseUp={handleSeekEnd}
+                            onTouchStart={() => setIsDragging(true)}
+                            onTouchEnd={handleSeekEnd}
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        />
+                        {/* Thumb Knob */}
+                         <div 
+                            className="absolute h-3.5 w-3.5 bg-white shadow-md border border-slate-100 rounded-full pointer-events-none"
+                            style={{ 
+                                left: `${(localSeekValue / (duration || 1)) * 100}%`,
+                                transform: 'translateX(-50%)' 
+                            }}
+                        />
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-400 w-8 tabular-nums">{formatTime(duration)}</span>
+                </div>
+            </div>
+        )}
         </div>
     </>
   );
