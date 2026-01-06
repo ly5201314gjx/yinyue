@@ -53,6 +53,7 @@ interface PlayOptions {
   forceReload?: boolean;
   keepQueue?: boolean;
   toggle?: boolean;
+  startTime?: number; // Start playing from this time
 }
 
 function App() {
@@ -92,6 +93,9 @@ function App() {
   
   // Flag to differentiate auto-next from manual-next (for Single Loop)
   const isAutoPlayRef = useRef(false);
+  
+  // Retry Logic for Stalled Playback
+  const retryCountRef = useRef(0);
 
   // Player State
   const [playerState, setPlayerState] = useState<PlayerState>({
@@ -262,10 +266,15 @@ function App() {
 
   // Player Handlers
   const playSong = async (song: Song, options: PlayOptions = {}) => {
-    const { forceReload = false, keepQueue = false, toggle = true } = options;
+    const { forceReload = false, keepQueue = false, toggle = true, startTime } = options;
 
     if (!keepQueue) {
         setPlaybackQueue(displayedSongs);
+    }
+
+    // Reset retry count if it's a completely new song (not a reload)
+    if (!forceReload && playerState.currentSong?.trackId !== song.trackId) {
+        retryCountRef.current = 0;
     }
 
     const playId = Date.now(); 
@@ -278,11 +287,16 @@ function App() {
             }));
             return;
         } else {
+             // Replaying same song or seeking via external trigger
              setPlayerState(prev => ({
                 ...prev,
-                currentSong: { ...prev.currentSong!, _playId: playId },
-                isPlaying: true,
-                currentTime: 0 
+                currentSong: { 
+                    ...prev.currentSong!, 
+                    _playId: playId,
+                    startTime: startTime !== undefined ? startTime : 0 
+                },
+                isPlaying: true, // Force play
+                currentTime: startTime !== undefined ? startTime : 0 
             }));
             return;
         }
@@ -291,7 +305,8 @@ function App() {
     const loadingSong = { 
         ...song, 
         previewUrl: (forceReload) ? '' : song.previewUrl,
-        _playId: playId
+        _playId: playId,
+        startTime: startTime !== undefined ? startTime : 0
     };
 
     setPlayerState(prev => ({ 
@@ -299,7 +314,7 @@ function App() {
         currentSong: loadingSong, 
         isPlaying: false, 
         isLoading: true,
-        currentTime: 0,
+        currentTime: startTime !== undefined ? startTime : 0,
         progress: 0,
         duration: 0,
         latency: undefined
@@ -315,7 +330,8 @@ function App() {
             songToPlay = { 
                 ...song, 
                 previewUrl: realUrl, 
-                _playId: playId 
+                _playId: playId,
+                startTime: startTime !== undefined ? startTime : 0
             };
             
             // Lazy lyrics
@@ -326,12 +342,12 @@ function App() {
             }
         } catch (e) {
              console.warn("Failed to resolve real URL, trying fallback", e);
-             songToPlay = { ...song, _playId: playId };
+             songToPlay = { ...song, _playId: playId, startTime: startTime !== undefined ? startTime : 0 };
         }
         
     } else if (!forceReload && song.isFullVersion) {
         // iTunes or other sources that are already fully populated
-        songToPlay = { ...song, _playId: playId };
+        songToPlay = { ...song, _playId: playId, startTime: startTime !== undefined ? startTime : 0 };
 
     } else {
         // SLOW PATH: VIP/Paid -> Search fallback
@@ -346,15 +362,16 @@ function App() {
                     lyrics: fullData.lyrics,
                     trackTimeMillis: fullData.duration * 1000,
                     source: 'netease',
-                    _playId: playId
+                    _playId: playId,
+                    startTime: startTime !== undefined ? startTime : 0
                 };
             } else {
                 console.warn("Smart search failed, falling back to original source.");
-                songToPlay = { ...song, _playId: playId };
+                songToPlay = { ...song, _playId: playId, startTime: startTime !== undefined ? startTime : 0 };
             }
         } catch (e) {
             console.error("Failed to fetch full version:", e);
-            songToPlay = { ...song, _playId: playId };
+            songToPlay = { ...song, _playId: playId, startTime: startTime !== undefined ? startTime : 0 };
         }
     }
 
@@ -363,7 +380,7 @@ function App() {
             return {
                 ...prev,
                 currentSong: songToPlay,
-                isPlaying: true,
+                isPlaying: true, // Auto play after load
                 isLoading: false,
                 duration: songToPlay.trackTimeMillis ? songToPlay.trackTimeMillis / 1000 : 0
             };
@@ -384,20 +401,52 @@ function App() {
     }
   };
 
-  const handlePlayError = () => {
-      if (playerState.currentSong) {
-          console.log("Playback error detected.");
-          setPlayerState(prev => ({
-              ...prev,
-              isPlaying: false,
-              isLoading: false
-          }));
+  const handlePlaybackStalled = () => {
+      // 2-Second Rule Implementation: If stalled, retry automatically
+      if (retryCountRef.current < 2) {
+          console.log(`[AutoRetry] Playback stalled. Attempting retry ${retryCountRef.current + 1}/2...`);
+          retryCountRef.current += 1;
+          if (playerState.currentSong) {
+              // Force reload URL and try again, preserving timestamp
+              playSong(playerState.currentSong, { 
+                  forceReload: true, 
+                  keepQueue: true, 
+                  toggle: false,
+                  startTime: playerState.currentTime // Resume
+              });
+          }
+      } else {
+          console.warn("[AutoRetry] Max retries reached. Trying next song or giving up.");
+          // Optional: handleNext(true) if completely failed? 
+          // For now, we stop spinning to save resources
+           setPlayerState(prev => ({ ...prev, isLoading: false, isPlaying: false }));
       }
+  };
+
+  const handlePlayError = () => {
+      handlePlaybackStalled();
   };
 
   const refreshCurrentSong = () => {
       if (playerState.currentSong) {
-          playSong(playerState.currentSong, { forceReload: true, keepQueue: true, toggle: false });
+          retryCountRef.current = 0; // Manual refresh resets retry count
+          const resumeTime = playerState.currentTime; // Capture current time
+          playSong(playerState.currentSong, { 
+              forceReload: true, 
+              keepQueue: true, 
+              toggle: false,
+              startTime: resumeTime // Pass current time to resume
+          });
+      }
+  };
+  
+  const handleLyricsSeek = (time: number) => {
+      if (playerState.currentSong) {
+          playSong(playerState.currentSong, {
+              keepQueue: true,
+              toggle: false,
+              startTime: time
+          });
       }
   };
 
@@ -825,6 +874,7 @@ function App() {
             onClose={() => setIsLyricsOpen(false)} 
             song={playerState.currentSong}
             currentTime={playerState.currentTime}
+            onSeek={handleLyricsSeek}
         />
 
         <PlayerBar 
@@ -845,6 +895,7 @@ function App() {
           onToggleMode={togglePlayMode}
           onTogglePlaylist={() => setIsPlaylistOpen(!isPlaylistOpen)}
           onPlayError={handlePlayError}
+          onPlaybackStalled={handlePlaybackStalled}
         />
       </div>
     </div>

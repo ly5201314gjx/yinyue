@@ -20,6 +20,7 @@ interface PlayerBarProps {
   onToggleMode: () => void;
   onTogglePlaylist: () => void;
   onPlayError: () => void;
+  onPlaybackStalled: () => void; // New prop for retry logic
 }
 
 const PlayerBar: React.FC<PlayerBarProps> = ({
@@ -39,7 +40,8 @@ const PlayerBar: React.FC<PlayerBarProps> = ({
   onLatencyChange,
   onToggleMode,
   onTogglePlaylist,
-  onPlayError
+  onPlayError,
+  onPlaybackStalled
 }) => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const { currentSong, isPlaying, isLoading, volume, currentTime, duration } = playerState;
@@ -48,11 +50,45 @@ const PlayerBar: React.FC<PlayerBarProps> = ({
   const loadStartTimeRef = useRef<number>(0);
   const lastTimeUpdateRef = useRef<number>(0);
   const [errorRetries, setErrorRetries] = useState(0);
+  const pendingSeekTimeRef = useRef<number | null>(null);
+  
+  // Watchdog timer reference
+  const watchdogTimerRef = useRef<any>(null);
 
   // Reset retries when song changes
   useEffect(() => {
     setErrorRetries(0);
   }, [currentSong?.trackId]);
+
+  // --- Watchdog: Auto-retry if not playing after 2 seconds ---
+  useEffect(() => {
+    // Clear existing timer whenever state changes
+    if (watchdogTimerRef.current) {
+        clearTimeout(watchdogTimerRef.current);
+        watchdogTimerRef.current = null;
+    }
+
+    if (isPlaying && !isLoading && currentSong) {
+        watchdogTimerRef.current = setTimeout(() => {
+            if (audioRef.current) {
+                // If strictly paused OR stuck at 0:00 despite being "playing" state
+                const isStuck = audioRef.current.paused || (audioRef.current.currentTime < 0.1 && !audioRef.current.ended && (!currentSong.startTime || currentSong.startTime < 0.1));
+                
+                if (isStuck) {
+                    console.warn("[PlayerBar] Watchdog triggered: Playback stalled, requesting retry.");
+                    onPlaybackStalled();
+                }
+            }
+        }, 2500); // 2.5 seconds tolerance
+    }
+
+    return () => {
+        if (watchdogTimerRef.current) {
+            clearTimeout(watchdogTimerRef.current);
+        }
+    };
+  }, [isPlaying, isLoading, currentSong?.trackId, currentSong?.previewUrl, onPlaybackStalled]);
+
 
   // Sync Audio Playback State
   useEffect(() => {
@@ -62,6 +98,7 @@ const PlayerBar: React.FC<PlayerBarProps> = ({
         if (playPromise !== undefined) {
           playPromise.catch(error => {
             console.log("Playback prevented or interrupted:", error);
+            // Don't error immediately, let the watchdog handle it if it persists
           });
         }
       } else {
@@ -83,19 +120,37 @@ const PlayerBar: React.FC<PlayerBarProps> = ({
           if (audioRef.current.src !== currentSong.previewUrl) {
               loadStartTimeRef.current = performance.now();
               audioRef.current.src = currentSong.previewUrl;
+              
+              // Register start time if present (e.g. for refresh)
+              if (currentSong.startTime !== undefined) {
+                  pendingSeekTimeRef.current = currentSong.startTime;
+                  // Try setting it immediately (some browsers allow it)
+                  audioRef.current.currentTime = currentSong.startTime;
+              } else {
+                  pendingSeekTimeRef.current = null;
+              }
+
+              audioRef.current.load(); // Explicit load helps some browsers
               lastTimeUpdateRef.current = 0; 
               onLatencyChange(0);
           }
       }
-  }, [currentSong?.previewUrl]);
+  }, [currentSong?.previewUrl, currentSong?.startTime]);
 
-  // Handle Forced Replay
+  // Handle Forced Replay or Seek Trigger (Same URL, different _playId)
   useEffect(() => {
       if (currentSong?._playId && audioRef.current) {
+          // Check if we have a specific start time for this "play action"
+          const seekTo = currentSong.startTime !== undefined ? currentSong.startTime : 0;
+          
+          // Only apply if URL is same (otherwise the Sync Source effect handles it)
           if (audioRef.current.src === currentSong.previewUrl) {
-              audioRef.current.currentTime = 0;
+              audioRef.current.currentTime = seekTo;
               if (isPlaying && !isLoading) {
-                  audioRef.current.play().catch(e => console.log("Replay failed", e));
+                  const playPromise = audioRef.current.play();
+                  if (playPromise !== undefined) {
+                      playPromise.catch(e => console.log("Replay failed", e));
+                  }
               }
           }
       }
@@ -123,6 +178,7 @@ const PlayerBar: React.FC<PlayerBarProps> = ({
   const handleTimeUpdate = (e: React.SyntheticEvent<HTMLAudioElement>) => {
       if (isSeeking) return;
       const time = e.currentTarget.currentTime;
+      
       if (Math.abs(time - lastTimeUpdateRef.current) > 0.1 || time < 1) {
           lastTimeUpdateRef.current = time;
           onTimeUpdate(time);
@@ -135,13 +191,29 @@ const PlayerBar: React.FC<PlayerBarProps> = ({
          onLatencyChange(latency);
          loadStartTimeRef.current = 0; 
      }
+
+     // Apply pending seek if any (double check for refresh reliability)
+     if (pendingSeekTimeRef.current !== null && audioRef.current) {
+         if (Math.abs(audioRef.current.currentTime - pendingSeekTimeRef.current) > 0.5) {
+             audioRef.current.currentTime = pendingSeekTimeRef.current;
+         }
+         pendingSeekTimeRef.current = null;
+     }
+     
+     // CRITICAL FIX: If state says playing, force it now that we can play.
+     if (isPlaying && audioRef.current && audioRef.current.paused) {
+         audioRef.current.play().catch(e => console.warn("Auto-play on canPlay failed", e));
+     }
   };
 
   const handleError = (e: React.SyntheticEvent<HTMLAudioElement, Event>) => {
-      console.error("Audio playback error:", e.currentTarget.error);
+      const err = e.currentTarget.error;
+      console.error("Audio playback error:", err);
+      
+      // If error occurs, try to trigger the retry logic via parent
       if (errorRetries < 2) { 
           setErrorRetries(prev => prev + 1);
-          onPlayError();
+          onPlayError(); // This effectively asks App to retry
       }
   };
 

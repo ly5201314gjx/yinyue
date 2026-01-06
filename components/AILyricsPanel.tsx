@@ -7,6 +7,7 @@ interface AILyricsPanelProps {
   isOpen: boolean;
   onClose: () => void;
   currentTime: number;
+  onSeek: (time: number) => void;
 }
 
 interface LyricLine {
@@ -37,11 +38,15 @@ const parseLrc = (lrc: string): LyricLine[] => {
     return result;
 };
 
-const AILyricsPanel: React.FC<AILyricsPanelProps> = ({ song, isOpen, onClose, currentTime }) => {
+const AILyricsPanel: React.FC<AILyricsPanelProps> = ({ song, isOpen, onClose, currentTime, onSeek }) => {
   const [lyricsLines, setLyricsLines] = useState<LyricLine[]>([]);
   const [activeLineIndex, setActiveLineIndex] = useState<number>(-1);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const activeLineRef = useRef<HTMLDivElement>(null);
+  
+  // Triple click detection refs
+  const clickCountRef = useRef(0);
+  const lastClickTimeRef = useRef(0);
 
   useEffect(() => {
       if (song?.lyrics) {
@@ -75,6 +80,24 @@ const AILyricsPanel: React.FC<AILyricsPanelProps> = ({ song, isOpen, onClose, cu
       }
   }, [activeLineIndex]);
 
+  const handleLineClick = (time: number) => {
+      const now = Date.now();
+      
+      // Reset count if time difference is too large (e.g., > 400ms)
+      if (now - lastClickTimeRef.current > 400) {
+          clickCountRef.current = 0;
+      }
+
+      clickCountRef.current += 1;
+      lastClickTimeRef.current = now;
+
+      if (clickCountRef.current === 3) {
+          // Trigger seek on 3rd click
+          onSeek(time);
+          clickCountRef.current = 0; // Reset
+      }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -83,15 +106,12 @@ const AILyricsPanel: React.FC<AILyricsPanelProps> = ({ song, isOpen, onClose, cu
         
         <div className="fixed inset-y-0 right-0 w-full md:w-[480px] bg-white shadow-[-10px_0_40px_rgba(0,0,0,0.1)] z-[130] transform transition-transform duration-500 ease-[cubic-bezier(0.2,0,0,1)] flex flex-col border-l border-slate-100">
         
-        {/* Header */}
-        <div className="p-5 flex items-center justify-between bg-white/95 backdrop-blur-md z-10 shrink-0 border-b border-slate-100 sticky top-0">
-            <div className="flex items-center gap-2.5">
-                <div className="bg-indigo-50 p-2 rounded-full text-indigo-600">
-                    <Music size={20} fill="currentColor" className="stroke-none" />
-                </div>
-                <span className="text-lg font-black text-slate-800 tracking-tight font-[Noto Sans SC]">播放详情</span>
-            </div>
-            <button onClick={onClose} className="w-10 h-10 rounded-full flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition-all">
+        {/* Header - Cleaned up */}
+        <div className="p-5 flex items-start justify-end bg-white/95 backdrop-blur-md z-10 shrink-0 sticky top-0">
+            {/* Left side info removed as requested */}
+            
+            {/* Close Button - Moved down slightly with mt-2 */}
+            <button onClick={onClose} className="w-10 h-10 mt-4 rounded-full flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition-all">
                 <X size={22} />
             </button>
         </div>
@@ -105,7 +125,7 @@ const AILyricsPanel: React.FC<AILyricsPanelProps> = ({ song, isOpen, onClose, cu
             ) : (
             <div className="animate-fade-in pb-24">
                 {/* Artwork Section */}
-                <div className="px-8 pt-10 pb-8 flex flex-col items-center text-center bg-gradient-to-b from-white via-slate-50/50 to-[#fdfdfd]">
+                <div className="px-8 pt-4 pb-8 flex flex-col items-center text-center bg-gradient-to-b from-white via-slate-50/50 to-[#fdfdfd]">
                     <div className="relative group mb-8">
                         <div className="absolute inset-0 bg-indigo-500 blur-3xl opacity-20 rounded-full transform scale-105 group-hover:opacity-30 transition-opacity"></div>
                         <img 
@@ -134,14 +154,12 @@ const AILyricsPanel: React.FC<AILyricsPanelProps> = ({ song, isOpen, onClose, cu
                                         <div 
                                             key={index}
                                             ref={isActive ? activeLineRef : null}
-                                            className={`transition-all duration-500 ease-out font-[Noto Sans SC] cursor-pointer px-4
+                                            className={`transition-all duration-500 ease-out font-[Noto Sans SC] cursor-pointer px-4 select-none
                                                 ${isActive 
                                                     ? 'text-indigo-600 text-xl md:text-2xl font-black scale-105 opacity-100 leading-snug drop-shadow-sm' 
                                                     : 'text-slate-400 text-sm md:text-base font-bold opacity-60 hover:text-slate-600 hover:opacity-90'
                                                 }`}
-                                            onClick={() => {
-                                                // Optional seek
-                                            }}
+                                            onClick={() => handleLineClick(line.time)}
                                         >
                                             {line.text}
                                         </div>
